@@ -22,168 +22,365 @@ const char MAIN_page[] PROGMEM = R"rawliteral(
   <title>ESP8266 Car Control</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; background-color: #282c36; color: white; padding: 20px; }
-    h1 { margin-bottom: 10px; }
-    .grid-container { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; justify-content: center; }
-    button {
-      width: 100px; height: 100px; font-size: 18px; color: white;
-      background: #007bff; border: none; border-radius: 10px; cursor: pointer;
-      transition: 0.1s; box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
+    body {
+      font-family: Arial, sans-serif;
+      background: rgba(24, 24, 24, 0.9);
+      backdrop-filter: blur(10px);
+      color: #f8f8f8;
+      text-align: center;
+      padding: 20px;
     }
-    button:active { transform: scale(0.95); }
-    .stop { background: #dc3545 !important; grid-column: span 3; }
-    .speed-container, .info-box, .toggle-container { margin-top: 20px; }
-    input[type="range"] { width: 80%; }
-    .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider {
-      position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-      background-color: #ccc; transition: 0.4s; border-radius: 34px;
+    h2 { margin-bottom: 10px; }
+    .mode-container {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: rgba(34, 34, 34, 0.5);
+      border-radius: 15px;
+      box-shadow: 0 4px 15px rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
     }
-    .slider:before {
-      position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px;
-      background-color: white; transition: 0.4s; border-radius: 50%;
+    .mode-btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 25px;
+      background: rgb(168, 33, 33);
+      color: white;
+      cursor: pointer;
+      transition: 0.3s;
+      font-weight: bold;
+      backdrop-filter: blur(10px);
     }
-    input:checked + .slider { background-color: #4CAF50; }
-    input:checked + .slider:before { transform: translateX(26px); }
+    .mode-btn.active {
+      background: rgba(80, 213, 84, 0.925);
+      box-shadow: 0 0 15px rgba(91, 215, 95, 0.5);
+    }
+    .manual-control {
+      display: none;
+      margin-top: 20px;
+    }
+    .manual-control.active { display: block; }
+    .control-grid {
+      display: grid;
+      grid-template-columns: 90px 90px 90px;
+      grid-template-rows: 90px 90px 90px;
+      grid-template-areas: ". forward ." "left . right" ". backward .";
+      gap: 15px;
+      justify-content: center;
+      align-items: center;
+      margin-top: 15px;
+    }
+    .control-btn {
+      width: 90px;
+      height: 90px;
+      font-size: 16px;
+      border-radius: 15px;
+      background: rgba(255, 26, 26, 0.668);
+      color: white;
+      border: 2px solid rgba(255, 89, 89, 0.771);
+      cursor: pointer;
+      transition: 0.2s;
+      backdrop-filter: blur(10px);
+    }
+    .control-btn:hover { background: rgba(4, 132, 243, 0.908); border: 2px solid rgba(89, 186, 255, 0.771);}
+    .control-btn:active { transform: scale(0.9); }
+    .forward { grid-area: forward; }
+    .left    { grid-area: left; }
+    .right   { grid-area: right; }
+    .backward { grid-area: backward; }
+    .stop-btn {
+      margin-top: 30px;
+      width: 140px;
+      height: 140px;
+      font-size: 24px;
+      font-weight: bold;
+      background: rgba(255, 68, 68, 0.914);
+      color: white;
+      border: 3px solid rgba(255, 119, 119, 0.421);
+      border-radius: 30px;
+      box-shadow: 0 0 30px rgba(255, 0, 0, 0.596);
+      cursor: pointer;
+      animation: pulse 1.5s infinite;
+      backdrop-filter: blur(10px);
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    .speed-slider {
+      margin-top: 15px;
+      width: 80%;
+      -webkit-appearance: none;
+      height: 10px;
+      background: rgba(68, 68, 68, 0.5);
+      border-radius: 5px;
+      backdrop-filter: blur(10px);
+    }
+    .speed-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      background: rgb(255, 37, 37);
+      border: 1.5px solid rgba(255, 89, 89, 0.771);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(255, 46, 46, 0.524);
+
+    }
+    .distance-display {
+      font-size: 1.5em;
+      margin-top: 15px;
+      background: rgba(37, 37, 37, 0.5);
+      padding: 10px;
+      box-shadow: 0 4px 15px rgba(255, 255, 255, 0.1);
+
+      border-radius: 10px;
+      transition: background 0.5s;
+      backdrop-filter: blur(10px);
+    }
   </style>
-  <script>
-    function sendData(dir) { fetch(`/move?direction=${dir}`).catch(console.error); }
-    function updateSpeed(v) { document.getElementById('speed-value').innerText = v; fetch(`/speed?value=${v}`).catch(console.error); }
-    function updateDistance() {
-      fetch('/getDistance').then(res => res.json()).then(data => {
-        document.getElementById('distance-value').innerText = data.distance;
-      }).catch(console.error);
-    }
-    function toggleAutoMode(el) {
-      fetch(`/toggleAuto?state=${el.checked ? 1 : 0}`).catch(console.error);
-    }
-    setInterval(updateDistance, 200);
-  </script>
 </head>
 <body>
-  <h1>ESP8266 Car Control</h1>
-  <div class="grid-container">
-    <button onclick="sendData('forward')">Forward</button>
-    <button onclick="sendData('left')">Left</button>
-    <button onclick="sendData('right')">Right</button>
-    <button onclick="sendData('backward')">Backward</button>
-    <button class="stop" onclick="sendData('stop')">STOP</button>
+  <h2>Car Control</h2>
+  <div class="mode-container">
+    <button class="mode-btn active" id="autoBtn" onclick="setMode('auto')">Auto</button>
+    <button class="mode-btn" id="manualBtn" onclick="setMode('manual')">Manual</button>
   </div>
-  <div class="speed-container">
-    <label>Speed: <span id="speed-value">512</span></label><br>
-    <input type="range" min="200" max="1023" value="512" id="speed" oninput="updateSpeed(this.value)">
+  <div class="distance-display" id="distanceDisplay">Distance: -- cm</div>
+  <div class="manual-control" id="manualControls">
+    <div class="control-grid">
+      <button class="control-btn forward" onclick="sendCommand('forward')">Forward</button>
+      <button class="control-btn left" onclick="sendCommand('left')">Left</button>
+      <button class="control-btn right" onclick="sendCommand('right')">Right</button>
+      <button class="control-btn backward" onclick="sendCommand('backward')">Backward</button>
+    </div>
+    <button class="stop-btn" onclick="sendCommand('stop')">STOP</button>
+    <input type="range" class="speed-slider" id="speedControl" min="110" max="1023" step="10" value="512" oninput="setSpeed(this.value)">
+    <p>Speed: <span id="speedValue">512</span></p>
   </div>
-  <div class="info-box">Distance: <span id="distance-value">---</span> cm</div>
-  <div class="toggle-container">
-    <label>Auto Navigation:</label>
-    <label class="switch">
-      <input type="checkbox" id="auto-toggle" onchange="toggleAutoMode(this)">
-      <span class="slider"></span>
-    </label>
-  </div>
+  <script>
+    function setMode(mode) {
+      fetch(`/toggleAuto?state=${mode === 'auto' ? 1 : 0}`)
+        .then(res => res.text()).then(data => console.log("Mode:", data));
+      document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.toggle('active', btn.id === mode + 'Btn'));
+      document.getElementById('manualControls').classList.toggle('active', mode === 'manual');
+    }
+
+    function sendCommand(dir) {
+      fetch(`/move?direction=${dir}`).catch(console.error);
+    }
+
+    function setSpeed(value) {
+      document.getElementById('speedValue').innerText = value;
+      fetch(`/setSpeed?value=${value}`).catch(console.error);
+    }
+
+    function updateDistance() {
+      fetch('/getDistance')
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('distanceDisplay').innerText = `Distance: ${data.distance} cm`;
+        })
+        .catch(console.error);
+    }
+
+    setInterval(updateDistance, 500);
+  </script>
 </body>
 </html>
+
 )rawliteral";
 
 int speedValue = 512;
 unsigned long lastObstacleCheck = 0;
-bool autoMode = true; // Enable automatic obstacle avoidance
+bool autoMode = true;
 
 void setup() {
   Serial.begin(115200);
   setupMotorPins();
   setupUltrasonicPins();
+  WiFi.softAP("Rishav", "12345678");
+  Serial.println("IP Address: " + WiFi.softAPIP().toString());
 
-  WiFi.softAP("ESP_Car", "12345678");
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.softAPIP());
+  server.on("/", []() { server.send_P(200, "text/html", MAIN_page); });
+  server.on("/move", []() { moveCar(server.arg("direction")); server.send(200, "text/plain", "OK"); });
+  
+  server.on("/setSpeed", []() {
+  if (server.hasArg("value")) {
+    speedValue = constrain(server.arg("value").toInt(), 100, 1023);
+    server.send(200, "text/plain", "Speed updated");
+  } else {
+    server.send(400, "text/plain", "Missing value parameter");
+  }
+  });
 
-  server.on("/", handleRoot);
-  server.on("/move", handleMove);
-  server.on("/speed", handleSpeed);
-  server.on("/getDistance", handleGetDistance);
-  server.on("/toggleAuto", handleToggleAuto);
+  
+  server.on("/toggleAuto", []() { 
+    if (server.hasArg("state")) {
+      autoMode = server.arg("state").toInt() == 1;
+      Serial.println(autoMode ? "Auto mode ON" : "Manual mode ON");
+      server.send(200, "text/plain", autoMode ? "Auto mode ON" : "Manual mode ON");
+    } else server.send(400, "text/plain", "Missing state parameter");
+  });
+  server.on("/getDistance", []() { 
+    server.send(200, "application/json", "{\"distance\": " + String(measureDistance()) + "}");
+  });
+
   server.begin();
   Serial.println("HTTP server started");
 }
 
 void loop() {
   server.handleClient();
-  
-  if (autoMode && millis() - lastObstacleCheck > 100) {  
+  if (autoMode && millis() - lastObstacleCheck > 200) {
     lastObstacleCheck = millis();
     handleObstacleAvoidance();
   }
-}
-
-void handleRoot() { server.send(200, "text/html", MAIN_page); }
-void handleSpeed() { speedValue = server.arg("value").toInt(); server.send(200, "text/plain", "Speed updated"); }
-void handleMove() { moveCar(server.arg("direction")); server.send(200, "text/plain", "OK"); }
-void handleGetDistance() {
-  String jsonResponse = "{\"distance\": " + String(measureDistance()) + "}";
-  server.send(200, "application/json", jsonResponse);
-}
-void handleToggleAuto() {
-  autoMode = server.arg("state").toInt() == 1;
-  server.send(200, "text/plain", autoMode ? "Auto mode ON" : "Auto mode OFF");
 }
 
 void moveCar(String direction) {
   analogWrite(ENA, speedValue);
   analogWrite(ENB, speedValue);
 
-  if (direction == "left") { digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW); digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW); delay(150); stopCar(); }
-  else if (direction == "right") { digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH); digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH); delay(150); stopCar(); }
-  else if (direction == "backward") { digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH); digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW); }
-  else if (direction == "forward") { digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW); digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH); }
+  if (direction == "forward") setMotorState(LOW, HIGH, LOW, HIGH);
+  else if (direction == "backward") setMotorState(HIGH, LOW, HIGH, LOW);
+  else if (direction == "left") turnCar(LOW, HIGH, HIGH, LOW);
+  else if (direction == "right") turnCar(HIGH, LOW, LOW, HIGH);
   else stopCar();
 }
 
-void stopCar() {
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, LOW);
+void turnCar(int a, int b, int c, int d) {
+  setMotorState(a, b, c, d);
+  delay(150);
+  stopCar();
 }
 
+void stopCar() { setMotorState(LOW, LOW, LOW, LOW); }
+
 void handleObstacleAvoidance() {
-  float distance = measureDistance();
-  if (distance > 0 && distance < 15) { 
+    float distance = measureDistance();
+
+    if (distance > 0 && distance < 15) {  
+        smoothStop();
+        moveCar("backward");
+        delay(500);
+        smoothStop();
+
+        float leftDist, rightDist, frontLeft, frontRight;
+        int attempt = 0;
+
+        while (attempt < 3) {  // Allow up to 3 retries for best path
+            // Scan different angles
+            turnCar(LOW, HIGH, HIGH, LOW);  // Slight left turn
+            delay(250);
+            frontLeft = measureDistance();
+
+            turnCar(HIGH, LOW, LOW, HIGH);  // Slight right turn
+            delay(500);
+            frontRight = measureDistance();
+
+            turnCar(LOW, HIGH, HIGH, LOW);  // Full left turn
+            delay(400);
+            leftDist = measureDistance();
+
+            turnCar(HIGH, LOW, LOW, HIGH);  // Full right turn
+            delay(500);
+            rightDist = measureDistance();
+
+            // Decision Making: Choose the most open space
+            if (leftDist > rightDist && leftDist > 20) {
+                moveCar("left");
+                delay(map(leftDist, 20, 100, 400, 700));  // Adaptive turn timing
+                moveCar("forward");
+                break;
+            } else if (rightDist > leftDist && rightDist > 20) {
+                moveCar("right");
+                delay(map(rightDist, 20, 100, 400, 700));
+                moveCar("forward");
+                break;
+            } else if (frontLeft > 20) {
+                moveCar("left");
+                delay(400);
+                moveCar("forward");
+                break;
+            } else if (frontRight > 20) {
+                moveCar("right");
+                delay(400);
+                moveCar("forward");
+                break;
+            } else {
+                // If both left and right are blocked, try rotating fully
+                moveCar("backward");
+                delay(300);
+                moveCar("left");
+                delay(600); // Rotate 90 degrees
+                moveCar("forward");
+                attempt++;
+            }
+        }
+
+        // If still stuck, perform a full rotation scan
+        if (attempt >= 3) {
+            moveCar("backward");
+            delay(500);
+            moveCar("left");
+            delay(800); // 180-degree rotation
+            moveCar("forward");
+        }
+    }
+}
+
+void smoothStop() {
+    analogWrite(ENA, 120);  
+    analogWrite(ENB, 120);
+    delay(150);
     stopCar();
-    delay(200);
-
-    moveCar("backward");
-    delay(500);
-    stopCar();
-
-    float leftDist, rightDist;
-
-    moveCar("left");
-    delay(200);
-    leftDist = measureDistance();
-
-    moveCar("right");
-    delay(400);
-    rightDist = measureDistance();
-
-    moveCar(leftDist > rightDist ? "left" : "right");
-    delay(300);
-    moveCar("forward");
-  }
 }
 
 float measureDistance() {
-  digitalWrite(TRIG, LOW);
-  delayMicroseconds(2);
-  digitalWrite(TRIG, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIG, LOW);
+    const int numSamples = 5;
+    float distances[numSamples];
 
-  float duration = pulseIn(ECHO, HIGH, 20000); 
-  float distance = (duration * 0.0343) / 2;
-  return (distance > 2 && distance < 300) ? distance : 300;
+    for (int i = 0; i < numSamples; i++) {
+        digitalWrite(TRIG, LOW);
+        delayMicroseconds(2);
+        digitalWrite(TRIG, HIGH);
+        delayMicroseconds(10);
+        digitalWrite(TRIG, LOW);
+        
+        float duration = pulseIn(ECHO, HIGH, 20000);
+        distances[i] = (duration * 0.0343) / 2;
+        delay(10);
+    }
+
+    sortArray(distances, numSamples);
+    float distance = distances[numSamples / 2];
+
+    return (distance > 2 && distance < 300) ? distance : 300;
 }
 
-void setupMotorPins() { pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT); pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT); pinMode(ENA, OUTPUT); pinMode(ENB, OUTPUT); }
+void sortArray(float arr[], int size) {
+    for (int i = 0; i < size - 1; i++) {
+        for (int j = 0; j < size - i - 1; j++) {
+            if (arr[j] > arr[j + 1]) {
+                float temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+        }
+    }
+}
+
+
+void setMotorState(int in1, int in2, int in3, int in4) {
+  digitalWrite(IN1, in1);
+  digitalWrite(IN2, in2);
+  digitalWrite(IN3, in3);
+  digitalWrite(IN4, in4);
+}
+
+void setupMotorPins() { for (int pin : {IN1, IN2, IN3, IN4, ENA, ENB}) pinMode(pin, OUTPUT); }
 void setupUltrasonicPins() { pinMode(TRIG, OUTPUT); pinMode(ECHO, INPUT); }
